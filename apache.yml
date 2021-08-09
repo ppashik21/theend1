@@ -1,18 +1,81 @@
 ---
 - hosts: webservers 
-  become: True
+  become: yes
+  gather_facts: false
   tasks:
-    - name: Install packages
-      apt:
-        name: "httpd"
-        state: "present"
-    - name: Start Apache server
-      service:
-        name: httpd
-        state: started
-        enabled: True
-    - name: Deploy static website
-      copy:
-        src: index.html
-        dest: /var/www/html/
-...
+  - name: Install docker packages
+    apt:
+      name: "{{ item }}"
+      state: present
+      update_cache: yes
+    with_items:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - software-properties-common
+    tags:
+      - docker
+  - name: Add Docker s official GPG key
+    apt_key:
+      url: https://download.docker.com/linux/ubuntu/gpg
+      state: present
+    tags:
+      - docker
+  - name: Verify that we have the key with the fingerprint
+    apt_key:
+      id: 0EBFCD88
+      state: present
+    tags:
+      - docker
+  - name: Set up the stable repository
+    apt_repository:
+      repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu xenial stable
+      state: present
+      update_cache: yes
+    tags:
+      - docker
+  - name: Update apt packages
+    apt:
+      update_cache: yes
+    tags:
+      - docker
+  - name: Install docker
+    apt:
+      name: docker-ce
+      state: present
+      update_cache: yes
+    #notify: Start docker on boot
+    tags:
+      - docker
+  - name: Copy Dockerfile
+    copy:
+      src: ./Dockerfile
+      dest: /home/Dockerfile
+      owner: root
+      group: root
+      mode: '0644'
+  - name: Copy index.html
+    copy:
+      src: ./index.html
+      dest: /home/index.html
+      owner: root
+      group: root
+      mode: '0644'
+  - name: Get info on docker host and list images
+    docker_host_info:
+     containers: yes
+    register: result
+  - name: Stop all containers
+    shell: "docker container stop $(docker container ls -aq)"
+    when: result.host_info.Containers != 0
+  - name: Remove all containers
+    shell: "docker container rm $(docker container ls -aq)"
+    when: result.host_info.Containers != 0
+  - name: Remove all images
+    shell: "docker rmi $(docker images -a -q)"
+    ignore_errors: yes
+    when: result.host_info.Containers != 0
+  - name: build docker
+    shell: "docker build -t devopser/testcicd:latest /home/"
+  - name: run
+    shell: "docker run --name=test -p 1234:80 -d devopser/testcicd:latest"
