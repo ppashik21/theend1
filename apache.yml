@@ -56,7 +56,7 @@
       mode: '0644'
   - name: Copy index.html
     copy:
-      src: ./index.html
+      src: /var/lib/jenkins/workspace/pypy/index.html
       dest: /home/index.html
       owner: root
       group: root
